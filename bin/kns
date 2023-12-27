@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+#
+usage() { # {{{
+    cat <<-EOT
+    Usage: $(basename "$0") <options> NAMESPACE
+        Options:
+            -c            Just print current ns
+            -l            List all namespaces
+            -h            Show help / usage
+EOT
+} # }}}
+
+
+while getopts :hcl opt # {{{
+do
+    case $opt in
+        c)
+            current_ns=$(kubectl config view --minify=true -o jsonpath="{..context.namespace}")
+            printf "%s\n" "$current_ns"
+            exit 0
+            ;;
+        l)
+            kubectl get ns -o json | jq '.items[].metadata.name' -r | sort
+            exit 0
+            ;;
+        h)
+            usage
+            exit
+            ;;
+        :)
+            printf "Option '%s' requires an argument\n" "${OPTARG}" >&2
+            usage >&2
+            exit 28
+            ;;
+        ?)
+            printf "Invalid option '%s'\n" "${OPTARG}" >&2
+            usage >&2
+            exit 27
+            ;;
+    esac
+done # }}}
+shift $((OPTIND-1))
+
+current_ns=$(kubectl config view --minify=true -o jsonpath="{..context.namespace}")
+: "${current_ns:=default}"
+if [ $# -eq 0 ]
+then
+    echo "Current namespace: '$current_ns'. Pass a namespace name to this command to set a new namespace"   >&2
+    exit
+fi
+ns=$1
+if [ "$current_ns" = "$ns" ]
+then
+    echo "Namespace already set to $ns" >&2
+    exit
+fi
+if ! kubectl get ns "$ns"
+then
+    echo "No namespace exists with the name '$ns'" >&2
+    exit
+fi
+kubectl config set-context --current --namespace="$ns"
+echo "Setting context to ${ns:-default}"
