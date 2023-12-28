@@ -1,0 +1,124 @@
+#!/bin/bash
+declare -a clusters
+
+usage() { # {{{
+    cat <<-EOT
+    Usage: $0 <options> CONTEXT
+        Options:
+          -l        List supported clusters
+          -L        List supported clusters and the context they map to
+          -h        Show help/usage
+
+EOT
+} # }}}
+
+die() { # {{{
+    local -i code
+    code=$1
+    shift
+    echo "Error! => $*" >&2
+    echo >&2
+    usage >&2
+    # shellcheck disable=SC2086
+    exit $code
+} # }}}
+
+containsElement () { # {{{
+  local e match
+  match=$1
+  shift
+  for e
+  do
+      [[ "$e" == "$match" ]] && return 0
+  done
+  return 1
+} # }}}
+
+arrayIndex () { # {{{
+    local -i c
+    c=0
+    local i
+    item=$1
+    shift
+    for i
+    do
+        [[ "$i" = "${item}" ]] && break
+        c=$((c+1))
+    done
+    echo $c
+} # }}}
+
+list() { # {{{
+    current_context=$(kubectl config current-context)
+    kubectl config get-contexts -o name | while read -r context 
+                                          do
+                                              if [ "$context" = "$current_context" ]
+                                              then
+                                                  echo -e "${context} \e[1;32m*\e[0m"
+                                              else
+                                                  echo "${context}"
+                                              fi
+                                          done
+} # }}}
+
+cluster_names() { # {{{
+    current_context=$(kubectl config current-context)
+    kubectl config get-contexts -o name | xargs
+} # }}}
+
+while getopts :hlL opt # {{{
+do 
+    case $opt in
+        l)
+            list
+            exit
+            ;;
+        L)
+            cluster_names
+            exit
+            ;;
+        h) 
+            usage
+            exit
+            ;;
+        \?) 
+            echo "Invalid option '${OPTARG}'" >&2
+            usage >&2
+            exit 27
+            ;;
+        :) 
+            echo "Option ${OPTARG} requires an argument" >&2
+            usage >&2
+            exit 28
+            ;;
+    esac
+done # }}}
+# shellcheck disable=SC2086
+if [ $# -eq 0 ] 
+then
+    echo 'No arguments passed, listing contexts' >&2
+    list
+    exit
+fi
+ 
+shift $((OPTIND-1))
+cluster_name=$1
+
+if [ -f ~/.kube/kcontexts ]
+then
+    read -ra cluster_names < <(kubectl --kubeconfig ~/.kube/kcontexts config get-contexts -o name | xargs)
+    containsElement "$cluster_name" "${cluster_names[@]}" || die 1 "${cluster_name} is not a supported cluster name: ${cluster_names[*]}"
+    cluster=$cluster_name
+elif [ -f ~/.kube/conf.d/kcontexts.yaml ]
+then
+    read -ra cluster_names < <(kubectl --kubeconfig ~/.kube/conf.d/kcontexts.yaml config get-contexts -o name | xargs)
+    containsElement "$cluster_name" "${cluster_names[@]}" || die 1 "${cluster_name} is not a supported cluster name: ${cluster_names[*]}"
+    cluster=$cluster_name
+else
+    read -ra cluster_names <  <(cluster_names)
+    containsElement "$cluster_name" "${cluster_names[@]}" || die 1 "${cluster_name} is not a supported cluster name: ${cluster_names[*]}"
+    cluster=${cluster_name}
+fi
+kubectl config use-context "$cluster"
+
+# vim: set foldmethod=marker et ts=4 sts=4 sw=4 :
