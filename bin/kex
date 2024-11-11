@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+
+usage() { # {{{
+    cat <<-EOT
+    Usage: $just_me <options> [commands]
+        Options:
+            -p <pod>       Specify the pod to exec into
+            -n <namespace> Specify the namespace to exec into
+            -h             Show help / usage
+EOT
+} # }}}
+
+namespace=""
+context=""
+
+while getopts :hc:n:p: opt # {{{
+do
+    case $opt in
+        p)
+            pod=$OPTARG
+            ;;
+        n)
+            namespace="-n $OPTARG"
+            ;;
+        c)
+            context="--context $OPTARG"
+            ;;
+        h)
+            usage
+            exit
+            ;;
+        :)
+            printf "Option '%s' requires an argument\n" "${OPTARG}" >&2
+            usage >&2
+            exit 28
+            ;;
+        ?)
+            printf "Invalid option '%s'\n" "${OPTARG}" >&2
+            usage >&2
+            exit 27
+            ;;
+    esac
+done # }}}
+shift $((OPTIND-1))
+
+if [ -z "$pod" ]
+then
+    pod=$(kubectl get pods $context $namespace -l tier=utility -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+fi
+
+if [ -z "$pod" ]
+then
+    pod=$(kubectl get pods $context $namespace -l "app.kubernetes.io/component"="nats-box" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+fi
+
+if [ -z "$pod" ]
+then
+    echo "No pod found, searched by label for 'tier=utility' and 'app.kubernetes.io/component=nats-box' pods. Exiting."
+    exit 1
+fi
+
+if [ "$#" -eq 0 ]
+then
+    set -x
+    kubectl $context $namespace exec -it $pod -- /bin/sh
+else
+    set -x
+    kubectl $context $namespace exec -it $pod "$@"
+fi
