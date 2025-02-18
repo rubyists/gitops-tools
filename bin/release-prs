@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+# Usage: release_prs RELEASE_OR_TAG
+#
+# Example: release_prs 0.1.0
+#
+# This script will list all PRs associated with a release.
+gh release view "$1" |awk '/https:.*\/pull/{print $(NF)}'
