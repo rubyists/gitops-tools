@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+usage() {
+    printf "Usage: %s <pr-number>\n" "$0"
+}
+
+pr=$1
+shift
+if [ -z "$pr" ]; then
+    usage >&2
+    exit 1
+fi
+
+if [ $# -ne 0 ]
+then
+    printf "Error: Extra arguments provided: %s\n" "$@" >&2
+    printf "\n" >&2
+    usage >&2
+    exit 1
+fi
+
+comments=$(gh pr view --json comments,reviews "$pr" 2>/dev/null) || { printf "Error: Failed to view PR #%s\n" "$pr" >&2; exit 1; }
+(printf "%s" "$comments" | jq -s 'add[]'; \
+ gh api /repos/:owner/:repo/pulls/"$pr"/comments) | jq -s 'add[] | { hunk: .diff_hunk, body: .body}' | jq .
